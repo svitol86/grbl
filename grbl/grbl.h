@@ -121,9 +121,9 @@
   #if defined(DUAL_AXIS_CONFIG_CNC_SHIELD_CLONE) && defined(DUAL_AXIS_CONFIG_PROTONEER_V3_51)
     #error "More than one dual axis configuration found. Select one."
   #endif
-  #if !defined(DUAL_AXIS_CONFIG_CNC_SHIELD_CLONE) && !defined(DUAL_AXIS_CONFIG_PROTONEER_V3_51)
-    #error "No supported dual axis configuration found. Select one."
-  #endif
+  // #if !defined(DUAL_AXIS_CONFIG_CNC_SHIELD_CLONE) && !defined(DUAL_AXIS_CONFIG_PROTONEER_V3_51)
+  //   #error "No supported dual axis configuration found. Select one."
+  // #endif
   #if defined(COREXY)
     #error "CORE XY not supported with dual axis feature."
   #endif
