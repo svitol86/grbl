@@ -362,13 +362,13 @@
   #ifdef ENABLE_DUAL_AXIS
 
     // NOTE: Step pulse and direction pins may be on any port and output pin.
-    #define STEP_DDR_DUAL       DDRC
-    #define STEP_PORT_DUAL      PORTC
-    #define DUAL_STEP_BIT       4  // Uno Analog Pin 4
+    #define STEP_DDR_DUAL       DDRA
+    #define STEP_PORT_DUAL      PORTA
+    #define DUAL_STEP_BIT       5  // MEGA2560 Digital Pin 27
     #define STEP_MASK_DUAL      ((1<<DUAL_STEP_BIT))
     #define DIRECTION_DDR_DUAL  DDRC
     #define DIRECTION_PORT_DUAL PORTC
-    #define DUAL_DIRECTION_BIT  3  // Uno Analog Pin 3
+    #define DUAL_DIRECTION_BIT  4  // MEGA2560 Digital Pin 33
     #define DIRECTION_MASK_DUAL ((1<<DUAL_DIRECTION_BIT))
 
     // NOTE: Pin used must be on the same port as other limit pins.
