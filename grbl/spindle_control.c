@@ -97,6 +97,7 @@ uint8_t spindle_get_state()
 // Called by spindle_init(), spindle_set_speed(), spindle_set_state(), and mc_reset().
 void spindle_stop()
 {
+
   #ifdef VARIABLE_SPINDLE
     SPINDLE_TCCRA_REGISTER &= ~(1<<SPINDLE_COMB_BIT); // Disable PWM. Output voltage is zero.
     #ifdef USE_SPINDLE_DIR_AS_ENABLE_PIN
@@ -113,6 +114,39 @@ void spindle_stop()
       SPINDLE_ENABLE_PORT &= ~(1<<SPINDLE_ENABLE_BIT); // Set pin to low
     #endif
   #endif
+
+}
+
+void spindle_start()
+{
+
+  #if !defined(USE_SPINDLE_DIR_AS_ENABLE_PIN) && !defined(ENABLE_DUAL_AXIS)
+    if (state == SPINDLE_ENABLE_CW) {
+      SPINDLE_DIRECTION_PORT &= ~(1<<SPINDLE_DIRECTION_BIT);
+    } else {
+      SPINDLE_DIRECTION_PORT |= (1<<SPINDLE_DIRECTION_BIT);
+    }
+  #endif
+
+  #ifdef VARIABLE_SPINDLE
+    // NOTE: Assumes all calls to this function is when Grbl is not moving or must remain off.
+    if (settings.flags & BITFLAG_LASER_MODE) { 
+      if (state == SPINDLE_ENABLE_CCW) { rpm = 0.0; } // TODO: May need to be rpm_min*(100/MAX_SPINDLE_SPEED_OVERRIDE);
+    }
+    spindle_set_speed(spindle_compute_pwm_value(rpm));
+  #endif
+
+  #if (defined(USE_SPINDLE_DIR_AS_ENABLE_PIN) && \
+      !defined(SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED)) || !defined(VARIABLE_SPINDLE)
+    // NOTE: Without variable spindle, the enable bit should just turn on or off, regardless
+    // if the spindle speed value is zero, as its ignored anyhow.
+    #ifdef INVERT_SPINDLE_ENABLE_PIN
+      SPINDLE_ENABLE_PORT &= ~(1<<SPINDLE_ENABLE_BIT);
+    #else
+      SPINDLE_ENABLE_PORT |= (1<<SPINDLE_ENABLE_BIT);
+    #endif  
+  #endif
+
 }
 
 
@@ -235,38 +269,22 @@ void spindle_stop()
     #ifdef VARIABLE_SPINDLE
       sys.spindle_speed = 0.0;
     #endif
-    spindle_stop();
+
+    #ifdef PLASMA_THC
+      plasma_stop();  //This calls spindle_stop
+    #else
+      spindle_stop();
+    #endif
   
   } else {
     
-    #if !defined(USE_SPINDLE_DIR_AS_ENABLE_PIN) && !defined(ENABLE_DUAL_AXIS)
-      if (state == SPINDLE_ENABLE_CW) {
-        SPINDLE_DIRECTION_PORT &= ~(1<<SPINDLE_DIRECTION_BIT);
-      } else {
-        SPINDLE_DIRECTION_PORT |= (1<<SPINDLE_DIRECTION_BIT);
-      }
+    #ifdef PLASMA_THC
+      plasma_start();  //This calls spindle_stop
+    #else
+      spindle_start();
     #endif
-  
-    #ifdef VARIABLE_SPINDLE
-      // NOTE: Assumes all calls to this function is when Grbl is not moving or must remain off.
-      if (settings.flags & BITFLAG_LASER_MODE) { 
-        if (state == SPINDLE_ENABLE_CCW) { rpm = 0.0; } // TODO: May need to be rpm_min*(100/MAX_SPINDLE_SPEED_OVERRIDE);
-      }
-      spindle_set_speed(spindle_compute_pwm_value(rpm));
-    #endif
-    #if (defined(USE_SPINDLE_DIR_AS_ENABLE_PIN) && \
-        !defined(SPINDLE_ENABLE_OFF_WITH_ZERO_SPEED)) || !defined(VARIABLE_SPINDLE)
-      // NOTE: Without variable spindle, the enable bit should just turn on or off, regardless
-      // if the spindle speed value is zero, as its ignored anyhow.
-      #ifdef INVERT_SPINDLE_ENABLE_PIN
-        SPINDLE_ENABLE_PORT &= ~(1<<SPINDLE_ENABLE_BIT);
-      #else
-        SPINDLE_ENABLE_PORT |= (1<<SPINDLE_ENABLE_BIT);
-      #endif    
-    #endif
-  
+    
   }
-  
   sys.report_ovr_counter = 0; // Set to report change immediately
 }
 

@@ -38,6 +38,22 @@ volatile uint8_t sys_rt_exec_accessory_override; // Global realtime executor bit
 
 int main(void)
 {
+     // *---------------- Setting up ADC module ----------------------------*
+       #ifdef PLASMA_THC
+  adc_setup();
+  // Enable global interrupts
+  // AVR macro included in <avr/interrupts.h>, which the Arduino IDE
+  // supplies by default.
+  sei();
+
+  start_adc_convertion();
+  millis_timer=0;
+  timer_setup();
+  plasma_init();
+  #endif
+
+  //sei();
+  
   // Initialize system upon power-up.
   serial_init();   // Setup serial baud rate and interrupts
   settings_init(); // Load Grbl settings from EEPROM
@@ -45,7 +61,7 @@ int main(void)
   system_init();   // Configure pinout pins and pin-change interrupt
 
   memset(sys_position,0,sizeof(sys_position)); // Clear machine position.
-  sei(); // Enable interrupts
+  //sei(); // Enable interrupts
 
   // Initialize system state.
   #ifdef FORCE_INITIALIZATION_ALARM

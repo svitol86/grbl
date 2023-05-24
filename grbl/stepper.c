@@ -384,6 +384,10 @@ ISR(TIMER1_COMPA_vect)
         st.steps[Z_AXIS] = st.exec_block->steps[Z_AXIS] >> st.exec_segment->amass_level;
       #endif
 
+      #ifdef PLASMA_THC
+        
+      #endif
+
       #ifdef VARIABLE_SPINDLE
         // Set real-time spindle output as segment is loaded, just prior to the first step.
         spindle_set_speed(st.exec_segment->spindle_pwm);

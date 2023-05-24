@@ -102,7 +102,6 @@ static void report_util_float_setting(uint8_t n, float val, uint8_t n_decimal) {
   report_util_line_feed(); // report_util_setting_string(n);
 }
 
-
 // Handles the primary confirmation protocol response for streaming interfaces and human-feedback.
 // For every incoming line, this method responds with an 'ok' for a successful command or an
 // 'error:'  to indicate some error event with the line or some critical system error during
@@ -161,6 +160,26 @@ void report_feedback_message(uint8_t message_code)
       printPgmString(PSTR("Restoring spindle")); break;
     case MESSAGE_SLEEP_MODE:
       printPgmString(PSTR("Sleeping")); break;
+    case MESSAGE_POWER_SOURCE_FAULT:
+      printPgmString(PSTR("Power Fault")); break;
+    case MESSAGE_ALARM_OUT_SERVO_X1:
+      printPgmString(PSTR("Alarm Out Servo X1")); break; 
+    case MESSAGE_ALARM_OUT_SERVO_X2:
+      printPgmString(PSTR("Alarm Out Servo X2")); break; 
+    case MESSAGE_ALARM_OUT_SERVO_Y:
+      printPgmString(PSTR("Alarm Out Servo Y")); break; 
+    case MESSAGE_ALARM_TOURCH_SIGNAL:
+      printPgmString(PSTR("Alarm Tourch Signal")); break;
+    case MESSAGE_PLASMA_TORCH_ON:
+      printPgmString(PSTR("Plasma TORCH ON")); break;
+    case MESSAGE_PLASMA_ARC_OK:
+      printPgmString(PSTR("Plasma ARC OK")); break;
+    case MESSAGE_PLASMA_ARC_RETRY:
+      printPgmString(PSTR("Plasma ARC RETRY")); break;
+    case MESSAGE_PLASMA_ARC_FAILED:
+      printPgmString(PSTR("Plasma ARC FAILED")); break;
+    case MESSAGE_PLASMA_THC_ENABLED:
+      printPgmString(PSTR("Plasma THC ENABLED")); break;
   }
   report_util_feedback_line_feed();
 }
@@ -208,6 +227,20 @@ void report_grbl_settings() {
   #else
     report_util_uint8_setting(32,0);
   #endif
+  #ifdef PLASMA_THC
+    report_util_uint8_setting(33,settings.plasma.arc_retries);
+    report_util_float_setting(34,settings.plasma.arc_fail_timeout, 3);
+    report_util_float_setting(35,settings.plasma.arc_retry_delay, 3);
+    report_util_float_setting(36,settings.plasma.pause_at_end, 3);
+    report_util_uint8_setting(37,settings.plasma.thc_enabled);
+    report_util_uint8_setting(38,settings.plasma.arc_voltage_setpoint);
+    report_util_uint8_setting(39,settings.plasma.arc_voltage_hysteresis);
+    report_util_float_setting(40,settings.plasma.thc_delay, 3);
+    report_util_uint8_setting(41,settings.plasma.vad_threshold);
+    report_util_float_setting(42,settings.plasma.arc_voltage_scale, 3);
+    report_util_float_setting(43,settings.plasma.arc_voltage_offset, 3);
+  #endif
+  
   // Print axis settings
   uint8_t idx, set_idx;
   uint8_t val = AXIS_SETTINGS_START_VAL;
@@ -647,6 +680,25 @@ void report_realtime_status()
         #endif
       }  
     }
+  #endif
+
+  //Report thc status
+  //0 1 + - = X
+  //A -> Arc Ok
+  //T -> THC On
+  //X -> Anti-dive
+  //Act voltage
+  //PL:=1AT,188
+  #ifdef PLASMA_THC
+    printPgmString(PSTR("|Pl:"));
+    if (!plasma.torch_on) {serial_write('0'); } else {serial_write('1');}
+    if (plasma.arc_ok) { serial_write('A'); }
+    if (plasma.thc_enabled) { serial_write('T'); }
+    if (plasma.vad_lock) { serial_write('X'); }
+    if (plasma.jog_z_up) { serial_write('+'); }
+    if (plasma.jog_z_down) { serial_write('-'); }
+    serial_write(',');
+    print_uint32_base10((uint16_t)plasma.arc_voltage);
   #endif
 
   serial_write('>');

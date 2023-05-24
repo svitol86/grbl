@@ -12,7 +12,8 @@
                 "-ffunction-sections",
                 "-fdata-sections",
                 "-fno-threadsafe-statics",
-                "-Wno-error=narrowing"
+                "-Wno-error=narrowing",
+                "-mmcu=atmega2560"
             ],
             "intelliSenseMode": "gcc-x64",
             "includePath": [
@@ -28,6 +29,9 @@
             "cStandard": "c11",
             "cppStandard": "c++11",
             "defines": [
+                "__null=0",
+                "__flash=",
+                "__AVR_ATmega2560__",
                 "F_CPU=16000000L",
                 "ARDUINO=10607",
                 "ARDUINO_AVR_MEGA2560",
@@ -192,7 +196,6 @@
                 "__LDBL_HAS_DENORM__=1",
                 "__BUILTIN_AVR_BITSK=1",
                 "__BUILTIN_AVR_BITSR=1",
-                "__cplusplus=201402L",
                 "__cpp_ref_qualifiers=200710",
                 "__DEC128_MAX__=9.999999999999999999999999999999999E6144DL",
                 "__INT_LEAST32_MAX__=0x7fffffffL",
@@ -532,7 +535,10 @@
                 "__BUILTIN_AVR_FMUL=1",
                 "USBCON"
             ],
-            "configurationProvider": "ms-vscode.makefile-tools"
+            "browse": {
+                "limitSymbolsToIncludedHeaders": true
+            },
+            "mergeConfigurations": false
         }
     ]
 }

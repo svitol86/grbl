@@ -4,5 +4,7 @@
 *.DS_Store
 *.d
 bin/
+build/
 
 README.md
+.build

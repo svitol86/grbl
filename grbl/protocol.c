@@ -486,12 +486,18 @@ void protocol_exec_rt_system()
     }
   }
 
+  #ifdef PLASMA_THC
+    plasma_update();
+  #endif
+
   #ifdef DEBUG
     if (sys_rt_exec_debug) {
       report_realtime_debug();
       sys_rt_exec_debug = 0;
     }
   #endif
+
+
 
   // Reload step segment buffer
   if (sys.state & (STATE_CYCLE | STATE_HOLD | STATE_SAFETY_DOOR | STATE_HOMING | STATE_SLEEP| STATE_JOG)) {
@@ -541,6 +547,10 @@ static void protocol_exec_rt_suspend()
   #else
     if (block == NULL) { restore_condition = (gc_state.modal.spindle | gc_state.modal.coolant); }
     else { restore_condition = (block->condition & PL_COND_SPINDLE_MASK) | coolant_get_state(); }
+  #endif
+
+  #ifdef PLASMA_THC
+    system_set_exec_accessory_override_flag(EXEC_SPINDLE_OVR_STOP);
   #endif
 
   while (sys.suspend) {
@@ -733,7 +743,7 @@ static void protocol_exec_rt_suspend()
             }
           // Handles restoring of spindle state
           } else if (sys.spindle_stop_ovr & (SPINDLE_STOP_OVR_RESTORE | SPINDLE_STOP_OVR_RESTORE_CYCLE)) {
-            if (gc_state.modal.spindle != SPINDLE_DISABLE) {
+            if (gc_state.modal.spindle != SPINDLE_DISABLE && sys.state != STATE_ALARM) {
               report_feedback_message(MESSAGE_SPINDLE_RESTORE);
               if (bit_istrue(settings.flags,BITFLAG_LASER_MODE)) {
                 // When in laser mode, ignore spindle spin-up delay. Set to turn on laser when cycle starts.

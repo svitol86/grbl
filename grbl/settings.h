@@ -23,6 +23,7 @@
 #define settings_h
 
 #include "grbl.h"
+#include "thc.h"
 
 
 // Version of the EEPROM data. Will be used to migrate existing data from older versions of Grbl
@@ -110,6 +111,11 @@ typedef struct {
   float homing_seek_rate;
   uint16_t homing_debounce_delay;
   float homing_pulloff;
+
+  #ifdef PLASMA_THC
+    plasma_settings_t plasma; 
+  #endif
+
 } settings_t;
 extern settings_t settings;
 

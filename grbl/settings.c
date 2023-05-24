@@ -57,7 +57,21 @@ const __flash settings_t defaults = {\
     .acceleration[Z_AXIS] = DEFAULT_Z_ACCELERATION,
     .max_travel[X_AXIS] = (-DEFAULT_X_MAX_TRAVEL),
     .max_travel[Y_AXIS] = (-DEFAULT_Y_MAX_TRAVEL),
-    .max_travel[Z_AXIS] = (-DEFAULT_Z_MAX_TRAVEL)};
+    .max_travel[Z_AXIS] = (-DEFAULT_Z_MAX_TRAVEL),
+    #ifdef PLASMA_THC
+      .plasma.thc_enabled = 0,
+      .plasma.arc_retries = 1,
+      .plasma.arc_voltage_setpoint = 120,
+      .plasma.arc_voltage_hysteresis = 5,
+      .plasma.vad_threshold = 60,
+      .plasma.arc_fail_timeout = 1,
+      .plasma.arc_retry_delay = 1,
+      .plasma.pause_at_end = 0,
+      .plasma.thc_delay = 1.5,
+      .plasma.arc_voltage_scale = 250,
+      .plasma.arc_voltage_offset = 0
+    #endif
+    };
 
 
 // Method to store startup lines into EEPROM
@@ -294,6 +308,20 @@ uint8_t settings_store_global_setting(uint8_t parameter, float value) {
           return(STATUS_SETTING_DISABLED_LASER);
         #endif
         break;
+      #ifdef PLASMA_THC
+        case 33: settings.plasma.arc_retries = int_value; break;
+        case 34: settings.plasma.arc_fail_timeout = value; break;
+        case 35: settings.plasma.arc_retry_delay = value; break;
+        case 36: settings.plasma.pause_at_end = value; break;
+        case 37: settings.plasma.thc_enabled = int_value; break;
+        case 38: settings.plasma.arc_voltage_setpoint = int_value; break;
+        case 39: settings.plasma.arc_voltage_hysteresis = int_value; break;
+        case 40: settings.plasma.thc_delay = value; break;
+        case 41: settings.plasma.vad_threshold = int_value; break;
+        case 42: settings.plasma.arc_voltage_scale = value; break;
+        case 43: settings.plasma.arc_voltage_offset = value; break;
+      #endif
+      
       default:
         return(STATUS_INVALID_STATEMENT);
     }

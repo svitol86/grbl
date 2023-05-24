@@ -61,6 +61,14 @@
 #include "stepper.h"
 #include "jog.h"
 
+// THC Integration features
+#include "ports.h"
+#ifdef PLASMA_THC
+#include "adc.h"
+#include "timer.h"
+#include "thc.h"
+#endif
+
 // ---------------------------------------------------------------------------------------
 // COMPILE-TIME ERROR CHECKING OF DEFINE VALUES:
 

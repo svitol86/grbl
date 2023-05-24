@@ -1,5 +1,8 @@
 {
     "files.associations": {
-        "io.h": "c"
+        "grbl.h": "c",
+        "pid.h": "c",
+        "thc.h": "c",
+        "spindle_control.h": "c"
     }
 }

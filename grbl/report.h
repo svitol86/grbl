@@ -59,6 +59,7 @@
 #define STATUS_GCODE_UNUSED_WORDS 36
 #define STATUS_GCODE_G43_DYNAMIC_AXIS_ERROR 37
 #define STATUS_GCODE_MAX_VALUE_EXCEEDED 38
+#define STATUS_GCODE_PIN_LOCKED 60              // For command M42 use
 
 // Define Grbl alarm codes. Valid values (1-255). 0 is reserved.
 #define ALARM_HARD_LIMIT_ERROR      EXEC_ALARM_HARD_LIMIT
@@ -83,6 +84,20 @@
 #define MESSAGE_RESTORE_DEFAULTS 9
 #define MESSAGE_SPINDLE_RESTORE 10
 #define MESSAGE_SLEEP_MODE 11
+
+
+#define MESSAGE_PLASMA_TORCH_ON 12
+#define MESSAGE_PLASMA_ARC_OK 13
+#define MESSAGE_PLASMA_ARC_RETRY 14
+#define MESSAGE_PLASMA_ARC_FAILED 15
+#define MESSAGE_PLASMA_THC_ENABLED 16
+
+// Alarms code implemented
+#define MESSAGE_POWER_SOURCE_FAULT 20
+#define MESSAGE_ALARM_OUT_SERVO_X1 21
+#define MESSAGE_ALARM_OUT_SERVO_X2 22
+#define MESSAGE_ALARM_OUT_SERVO_Y 23
+#define MESSAGE_ALARM_TOURCH_SIGNAL 24
 
 // Prints system status messages.
 void report_status_message(uint8_t status_code);

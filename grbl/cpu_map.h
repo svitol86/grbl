@@ -372,10 +372,16 @@
     #define DIRECTION_MASK_DUAL ((1<<DUAL_DIRECTION_BIT))
 
     // NOTE: Pin used must be on the same port as other limit pins.
-    #define DUAL_LIMIT_BIT    7
+    #define DUAL_LIMIT_BIT    7 // MEGA2560 Digital Pin 13
     #define LIMIT_MASK        ((1<<X_LIMIT_BIT)|(1<<Y_LIMIT_BIT)|(1<<Z_LIMIT_BIT)|(1<<DUAL_LIMIT_BIT))
   #endif
   
+  #define ARC_OK_DDR      DDRK
+  #define ARC_OK_PIN      PINK
+  #define ARC_OK_PORT     PORTK
+  #define ARC_OK_BIT      6  // MEGA2560 Analog Pin 14
+  #define ARC_OK_MASK      (1<<ARC_OK_BIT) 
+
 #endif
 
 /*

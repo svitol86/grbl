@@ -373,31 +373,36 @@ void limits_go_home(uint8_t cycle_mask)
   for (idx=0; idx<N_AXIS; idx++) {
     // NOTE: settings.max_travel[] is stored as a negative value.
     if (cycle_mask & bit(idx)) {
-      #ifdef HOMING_FORCE_SET_ORIGIN
-        set_axis_position = 0;
-      #else
-        if ( bit_istrue(settings.homing_dir_mask,bit(idx)) ) {
-          set_axis_position = lround((settings.max_travel[idx]+settings.homing_pulloff)*settings.steps_per_mm[idx]);
-        } else {
-          set_axis_position = lround(-settings.homing_pulloff*settings.steps_per_mm[idx]);
-        }
-      #endif
+      if (idx != Z_AXIS) {
+        #ifdef HOMING_FORCE_SET_ORIGIN
+          set_axis_position = 0;
+        #else
+          if ( bit_istrue(settings.homing_dir_mask,bit(idx)) ) {
+            set_axis_position = lround((settings.max_travel[idx]+settings.homing_pulloff)*settings.steps_per_mm[idx]);
+          } else {
+            set_axis_position = lround(-settings.homing_pulloff*settings.steps_per_mm[idx]);
+          }
+        #endif
 
-      #ifdef COREXY
-        if (idx==X_AXIS) {
-          int32_t off_axis_position = system_convert_corexy_to_y_axis_steps(sys_position);
-          sys_position[A_MOTOR] = set_axis_position + off_axis_position;
-          sys_position[B_MOTOR] = set_axis_position - off_axis_position;
-        } else if (idx==Y_AXIS) {
-          int32_t off_axis_position = system_convert_corexy_to_x_axis_steps(sys_position);
-          sys_position[A_MOTOR] = off_axis_position + set_axis_position;
-          sys_position[B_MOTOR] = off_axis_position - set_axis_position;
-        } else {
+        #ifdef COREXY
+          if (idx==X_AXIS) {
+            int32_t off_axis_position = system_convert_corexy_to_y_axis_steps(sys_position);
+            sys_position[A_MOTOR] = set_axis_position + off_axis_position;
+            sys_position[B_MOTOR] = set_axis_position - off_axis_position;
+          } else if (idx==Y_AXIS) {
+            int32_t off_axis_position = system_convert_corexy_to_x_axis_steps(sys_position);
+            sys_position[A_MOTOR] = off_axis_position + set_axis_position;
+            sys_position[B_MOTOR] = off_axis_position - set_axis_position;
+          } else {
+            sys_position[idx] = set_axis_position;
+          }
+        #else
           sys_position[idx] = set_axis_position;
-        }
-      #else
-        sys_position[idx] = set_axis_position;
-      #endif
+        #endif
+      }
+      else {
+        sys_position[idx] = lround((-settings.max_travel[idx]-settings.homing_pulloff)*settings.steps_per_mm[idx]);
+      }
 
     }
   }
