@@ -90,19 +90,18 @@ void plasma_stop()
 void plasma_update()
 {
 
-  if (!settings.plasma.thc_enabled)
-  {
-    plasma.thc_enabled = plasma.jog_z_up = plasma.jog_z_down = false;
-    plasma.arc_voltage = 0;
-    return;
-  }
-
   //Calculate arc voltage value
   float arc_voltage = (analogVal / 1024.0 * settings.plasma.arc_voltage_scale) + settings.plasma.arc_voltage_offset;
   if (arc_voltage < 0)  { plasma.arc_voltage = 0; }
   else if (arc_voltage > UINT8_MAX)  { plasma.arc_voltage = UINT8_MAX; }
   else { plasma.arc_voltage = (uint8_t)arc_voltage; }
 
+  if (!settings.plasma.thc_enabled)
+  {
+    plasma.thc_enabled = plasma.jog_z_up = plasma.jog_z_down = false;
+    return;
+  }
+  
   // THC enabled afeter initial delay from arc ok signal
   if (plasma.arc_ok && millis_timer > plasma.thc_delay && !plasma.thc_enabled)
   {

@@ -18,16 +18,16 @@ void timer_setup(){
 // Z Axis step
 void step_z(){
             //Step
-            PORTL |= (1 << STEP_Z);     // set pin Z step high
+            STEP_PORT |= (1 << Z_STEP_BIT);     // set pin Z step high
             _delay_us(10);
-            PORTL &= ~(1 << STEP_Z);    // set pin Z step low
+            STEP_PORT &= ~(1 << Z_STEP_BIT);    // set pin Z step low
 }
 void set_z_dir_low(){
-            PORTL &= ~(1 << Z_DIRECTION_BIT);    // set pin Z dir low
+            DIRECTION_PORT &= ~(1 << Z_DIRECTION_BIT);    // set pin Z dir low
             _delay_us(10);
 }
 void set_z_dir_high(){
-            PORTL |= (1 << Z_DIRECTION_BIT);     // set Z dir high
+            DIRECTION_PORT |= (1 << Z_DIRECTION_BIT);     // set Z dir high
             _delay_us(10);
 }
 
