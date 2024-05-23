@@ -48,7 +48,7 @@
    10 Mar 2023 - V1.0.34 : move coolant code to the spindle control line to help with restarts
    26 Mar 2023 - V1.0.35 : plasma pierce height override,  spindle speed change always with an M3, version number display
 */
-obversion = 'V1.0.35_GMB';
+obversion = 'V1.3_GMB';
 description = "GRBL Plasma";  // cannot have brackets in comments
 longDescription = description + " : Post" + obversion; // adds description to post library dialog box
 vendor = "GMB";
@@ -56,7 +56,7 @@ model = "GRBL";
 certificationLevel = 2;
 minimumRevision = 45892;
 
-debugMode = true;
+debugMode = false;
 
 extension = "gcode";                            // file extension of the gcode file
 setCodePage("ascii");                           // character set of the gcode file
@@ -78,10 +78,21 @@ allowedCircularPlanes = (1 << PLANE_XY);// | (1 << PLANE_ZX) | (1 << PLANE_YZ); 
 // user-defined properties : defaults are set, but they can be changed from a dialog box in Fusion when doing a post.
 properties =
 {
-   machineHomeZ: -10,            // absolute machine coordinates where the machine will move to at the end of the job - first retracting Z, then moving home X Y
-   machineHomeX: -10,            // always in millimeters
-   machineHomeY: -10,
+   spindleOnOffDelay: 1.8,        // time (in seconds) the spindle needs to get up to speed or stop, or laser/plasma pierce delay
+   spindleTwoDirections: false,  // true : spindle can rotate clockwise and counterclockwise, will send M3 and M4. false : spindle can only go clockwise, will only send M3
+   hasCoolant: false,            // true : machine uses the coolant output, M8 M9 will be sent. false : coolant output not connected, so no M8 M9 will be sent
+   routerType: "other",
+   generateMultiple: true,        // specifies if a file should be generated for each tool change
+   machineHomeZ: 30,            // absolute machine coordinates where the machine will move to at the end of the job - first retracting Z, then moving home X Y
+   machineHomeX: 10,            // always in millimeters
+   machineHomeY: 10,
+   endPosZ: 200,
    gotoMCSatend: false,          // true will do G53 G0 x{machinehomeX} y{machinehomeY}, false will do G0 x{machinehomeX} y{machinehomeY} at end of program
+   PowerVaporise: 5,         // cutting power in percent, to vaporize plastic coatings
+   PowerThrough: 100,       // for through cutting
+   PowerEtch: 10,        // for etching the surface
+   UseZ: false,           // if true then Z will be moved to 0 at beginning and back to 'retract height' at end
+   UsePierce: false,      // if true && islaser && cutting use M3 and honor pierce delays, else use M4
    //plasma stuff
    plasma_usetouchoff: false,                        // use probe for touchoff if true
    plasma_touchoffOffset: 5.0,                       // offset from trigger point to real Z0, used in G10 line
@@ -98,20 +109,84 @@ properties =
    machineVendor: "GMB",
    modelMachine: "Generic",
    machineControl: "Grbl 1.1 PLASMA",
+
+   checkZ: false,    // true for a PS tool height checkmove at start of every file
+   checkFeed: 200    // always MM/min
+   //postProcessorDocs : 'https://docs.openbuilds.com/doku.php', // for future use.  link to post processor help docs.  be sure to uncomment comment as well
 };
 
 // user-defined property definitions - note, do not skip any group numbers
 groupDefinitions =
 {
    //postInfo: {title: "OpenBuilds Post Documentation: https://docs.openbuilds.com/doku.php", description: "", order: 0},
+   spindle: { title: "Spindle", description: "Spindle options", order: 1 },
    safety: { title: "Safety", description: "Safety options", order: 2 },
+   toolChange: { title: "Tool Changes", description: "Tool change options", order: 3 },
    startEndPos: { title: "Job Start Z and Job End X,Y,Z Coordinates", description: "Set the spindle start and end position", order: 4 },
    arcs: { title: "Arcs", description: "Arc options", order: 5 },
-   plasma: { title: "Plasma", description: "Plasma options", order: 6 },
+   laserPlasma: { title: "Laser / Plasma", description: "Laser / Plasma options", order: 6 },
    machine: { title: "Machine", description: "Machine options", order: 7 }
 };
 propertyDefinitions =
 {
+   /*
+       postProcessorDocs: {
+           group: "postInfo",
+           title: "Copy and paste linke to docs",
+           description: "Link to docs",
+           type: "string",
+       },
+   */
+   routerType: {
+      group: "spindle",
+      title: "SPINDLE Router type",
+      description: "Select the type of spindle you have.",
+      type: "enum",
+      values: [
+         { title: "Other", id: "other" },
+         { title: "Router11", id: "Router11" },
+         { title: "Makita RT0701", id: "Makita" },
+         { title: "Dewalt 611", id: "Dewalt" }
+      ]
+   },
+   spindleTwoDirections: {
+      group: "spindle",
+      title: "SPINDLE can rotate clockwise and counterclockwise?",
+      description: "Yes : spindle can rotate clockwise and counterclockwise, will send M3 and M4. No : spindle can only go clockwise, will only send M3",
+      type: "boolean",
+   },
+   spindleOnOffDelay: {
+      group: "spindle",
+      title: "SPINDLE on/off delay",
+      description: "Time (in seconds) the spindle needs to get up to speed or stop, also used for plasma pierce delay",
+      type: "number",
+   },
+   hasCoolant: {
+      group: "spindle",
+      title: "SPINDLE Has coolant?",
+      description: "Yes: machine uses the coolant output, M8 M9 will be sent. No : coolant output not connected, so no M8 M9 will be sent",
+      type: "boolean",
+   },
+   checkFeed: {
+      group: "safety",
+      title: "SAFETY: Check tool feedrate",
+      description: "Feedrate to be used for the tool length check, always millimeters.",
+      type: "spatial",
+   },
+   checkZ: {
+      group: "safety",
+      title: "SAFETY: Check tool Z length?",
+      description: "Insert a safe move and program pause M0 to check for tool length, tool will lower to clearanceHeight set in the Heights tab.",
+      type: "boolean",
+   },
+
+   generateMultiple: {
+      group: "toolChange",
+      title: "TOOL: Generate muliple files for tool changes?",
+      description: "Generate multiple files. One for each tool change.",
+      type: "boolean",
+   },
+
    gotoMCSatend: {
       group: "startEndPos",
       title: "EndPos: Use Machine Coordinates (G53) at end of job?",
@@ -132,8 +207,14 @@ propertyDefinitions =
    },
    machineHomeZ: {
       group: "startEndPos",
-      title: "startEndPos: START and End of job Z position (MCS Only) (MM)",
-      description: "G53 Z position to move to in Millimeters, normally negative.  Moves to this distance below Z home.",
+      title: "StartPos: Start of job Z position (MCS Only) (MM)",
+      description: "G53 Z position to move to in Millimeters.",
+      type: "spatial",
+   },
+   endPosZ: {
+      group: "startEndPos",
+      title: "EndPos: End of job Z position (MCS Only) (MM)",
+      description: "G53 Z position to move to in Millimeters.",
       type: "spatial",
    },
 
@@ -144,16 +225,21 @@ propertyDefinitions =
       type: "boolean",
    },
 
-   plasma_usetouchoff: { title: "Use Z touchoff probe routine", description: "Set to true if have a touchoff probe for Plasma.", group: "plasma", type: "boolean" },
-   plasma_touchoffOffset: { title: "Plasma touch probe offset", description: "Offset in Z at which the probe triggers, always Millimeters, always positive.", group: "plasma", type: "spatial" },
-   plasma_pierceHeightoverride: { title: "Override the pierce height", description: "Set to true if want to always use the pierce height Z value.", group: "plasma", type: "boolean" },
-   plasma_pierceHeightValue: { title: "Override the pierce height Z value", description: "Offset in Z for the plasma pierce height, always positive.", group: "plasma", type: "spatial" },
-   plasma_cutHeightoverride: { title: "Override the cut height", description: "Set to true if want to always use the cut height Z value.", group: "plasma", type: "boolean" },
-   plasma_cutHeightValue: { title: "Override the cut height Z value", description: "Offset in Z for the plasma cut height, always positive.", group: "plasma", type: "spatial" },
-   plasma_probeDistance: { title: "Probe travel distance", description: "Distance to probe down in Z, always in millimeters", group: "plasma", type: "spatial" },
-   plasma_probeRate: { title: "Probe travel rate", description: "Feedrate for probing, in mm/minute", group: "plasma", type: "integer" },
-   plasma_pierceDelayOverride: { title: "Override pierce delay", description: "Set to true if want to always use the pierce delay value.", group: "plasma", type: "boolean" },
-   plasma_pierceDelay: { title: "Override pierce delay value", description: "Pierce delay in s", group: "plasma", type: "number" },
+   PowerVaporise: { title: "LASER: Power for Vaporizing", description: "Just enough Power to VAPORIZE plastic coating, in percent.", group: "laserPlasma", type: "integer" },
+   PowerThrough: { title: "LASER: Power for Through Cutting", description: "Normal Through cutting power, in percent.", group: "laserPlasma", type: "integer" },
+   PowerEtch: { title: "LASER: Power for Etching", description: "Just enough power to Etch the surface, in percent.", group: "laserPlasma", type: "integer" },
+   UseZ: { title: "LASER: Use Z motions at start and end.", description: "Use True if you have a laser on a router with Z motion, or a PLASMA cutter.", group: "laserPlasma", type: "boolean" },
+   UsePierce: { title: "LASER: Use pierce delays with M3 motion when cutting.", description: "True will use M3 commands and pierce delays, else use M4 with no delays.", group: "laserPlasma", type: "boolean" },
+   plasma_usetouchoff: { title: "PLASMA: Use Z touchoff probe routine", description: "Set to true if have a touchoff probe for Plasma.", group: "laserPlasma", type: "boolean" },
+   plasma_touchoffOffset: { title: "PLASMA: Plasma touch probe offset", description: "Offset in Z at which the probe triggers, always Millimeters, always positive.", group: "laserPlasma", type: "spatial" },
+   plasma_pierceHeightoverride: { title: "PLASMA: Override the pierce height", description: "Set to true if want to always use the pierce height Z value.", group: "laserPlasma", type: "boolean" },
+   plasma_pierceHeightValue: { title: "PLASMA: Override the pierce height Z value", description: "Offset in Z for the plasma pierce height, always positive.", group: "laserPlasma", type: "spatial" },
+   plasma_cutHeightoverride: { title: "PLASMA: Override the cut height", description: "Set to true if want to always use the cut height Z value.", group: "laserPlasma", type: "boolean" },
+   plasma_cutHeightValue: { title: "PLASMA: Override the cut height Z value", description: "Offset in Z for the plasma cut height, always positive.", group: "laserPlasma", type: "spatial" },
+   plasma_probeDistance: { title: "PLASMA: Probe travel distance", description: "Distance to probe down in Z, always in millimeters", group: "laserPlasma", type: "spatial" },
+   plasma_probeRate: { title: "PLASMA: Probe travel rate", description: "Feedrate for probing, in mm/minute", group: "laserPlasma", type: "integer" },
+   plasma_pierceDelayOverride: { title: "PLASMA: Override pierce delay", description: "Set to true if want to always use the pierce delay value.", group: "laserPlasma", type: "boolean" },
+   plasma_pierceDelay: { title: "PLASMA: Override pierce delay value", description: "Pierce delay in s", group: "laserPlasma", type: "number" },
 
    machineVendor: {
       group: "machine",
@@ -174,6 +260,11 @@ propertyDefinitions =
       type: "string",
    }
 };
+
+// USER ADJUSTMENTS FOR PLASMA
+
+// END OF USER ADJUSTMENTS
+
 
 // creation of all kinds of G-code formats - controls the amount of decimals used in the generated G-Code
 var gFormat = createFormat({ prefix: "G", decimals: 0 });
@@ -206,14 +297,22 @@ var gFeedModeModal = createModal({}, gFormat);                                //
 var gUnitModal = createModal({}, gFormat);                                    // modal group 6 // G20-21
 var gWCSOutput = createModal({}, gFormat);                                    // for G54 G55 etc
 
+var sequenceNumber = 1;        //used for multiple file naming
+var multipleToolError = false; //used for alerting during single file generation with multiple tools
+var filesToGenerate = 1;       //used to figure out how many files will be generated so we can diplay in header
 var minimumFeedRate = toPreciseUnit(45, MM); // GRBL lower limit in mm/minute
 var fileIndexFormat = createFormat({ width: 2, zeropad: true, decimals: 0 });
+var isNewfile = false;  // set true when a new file has just been started
 
+var isLaser = false;    // set true for laser/water/
+var isPlasma = false;   // set true for plasma
+var power = 0;          // the setpower value, for S word when laser cutting
+var cutmode = 0;        // M3 or M4
 var Zmax = 0;
 var workOffset = 0;
 var haveRapid = false;  // assume no rapid moves
 var powerOn = false;    // is the laser power on? used for laser when haveRapid=false
-var retractHeight = 1;  // will be set by onParameter and used in onLinear to detect rapids
+var retractHeight = 5;  // will be set by onParameter and used in onLinear to detect rapids
 var clearanceHeight = 10;  // will be set by onParameter
 var plasma_cutHeight = 1;      // set by onParameter
 var leadinRate = 314;   // set by onParameter: the lead-in feedrate,plasma
@@ -224,7 +323,53 @@ var plasma_pierceHeight = 3.14; // set by onParameter from Linking|PierceClearan
 var coolantIsOn = 0;    // set when coolant is used to we can do intelligent turn off
 var currentworkOffset = 54; // the current WCS in use, so we can retract Z between sections if needed
 var clnt = '';          // coolant code to add to spindle line
-var probed = false;
+
+function toTitleCase(str) {
+   // function to reformat a string to 'title case'
+   return str.replace(/\w\S*/g, function (txt) {             // /\w\S*/g    keep that format, astyle will put spaces in it
+      return txt.charAt(0).toUpperCase() + txt.substr(1).toLowerCase();
+   });
+}
+
+function rpm2dial(rpm, op) {
+   // translates an RPM for the spindle into a dial value, eg. for the Makita RT0700 and Dewalt 611 routers
+   // additionally, check that spindle rpm is between minimum and maximum of what our spindle can do
+   // array which maps spindle speeds to router dial settings,
+   // according to Makita RT0700 Manual : 1=10000, 2=12000, 3=17000, 4=22000, 5=27000, 6=30000
+   // according to Dewalt 611 Manual : 1=16000, 2=18200, 3=20400, 4=22600, 5=24800, 6=27000
+
+   if (properties.routerType == "Dewalt") {
+      var speeds = [0, 16000, 18200, 20400, 22600, 24800, 27000];
+   }
+   else
+      if (properties.routerType == "Router11") {
+         var speeds = [0, 10000, 14000, 18000, 23000, 27000, 32000];
+      }
+      else {
+         // this is Makita R0701
+         var speeds = [0, 10000, 12000, 17000, 22000, 27000, 30000];
+      }
+   if (rpm < speeds[1]) {
+      alert("Warning", rpm + " rpm is below minimum spindle RPM of " + speeds[1] + " rpm in the " + op + " operation.");
+      return 1;
+   }
+
+   if (rpm > speeds[speeds.length - 1]) {
+      alert("Warning", rpm + " rpm is above maximum spindle RPM of " + speeds[speeds.length - 1] + " rpm in the " + op + " operation.");
+      return (speeds.length - 1);
+   }
+
+   var i;
+   for (i = 1; i < (speeds.length - 1); i++) {
+      if ((rpm >= speeds[i]) && (rpm <= speeds[i + 1])) {
+         return (((rpm - speeds[i]) / (speeds[i + 1] - speeds[i])) + i).toFixed(1);
+      }
+   }
+
+   alert("Error", "Error in calculating router speed dial.");
+   error("Fatal Error calculating router speed dial.");
+   return 0;
+}
 
 function checkMinFeedrate(section, op) {
    var alertMsg = "";
@@ -310,15 +455,47 @@ function formatComment(text) {
 }
 
 function writeComment(text) {
-   writeln(formatComment(text));
+   // v20 - split the line so no comment is longer than 70 chars
+   if (text.length > 70) {
+      //text = String(text).replace( /[^a-zA-Z\d:=,.]+/g, " "); // remove illegal chars
+      text = filterText(text.trim(), permittedCommentChars);
+      var bits = text.split(" "); // get all the words
+      var out = '';
+      for (i = 0; i < bits.length; i++) {
+         out += bits[i] + " "; // additional space after first line
+         if (out.length > 60)           // a long word on the end can take us to 80 chars!
+         {
+            writeln(formatComment(out.trim()));
+            out = "";
+         }
+      }
+      if (out.length > 0)
+         writeln(formatComment(out.trim()));
+   }
+   else
+      writeln(formatComment(text));
 }
 
 function writeHeader(secID) {
+   //writeComment("Header start " + secID);
+   if (multipleToolError) {
+      writeComment("Warning: Multiple tools found.  This post does not support tool changes.  You should repost and select True for Multiple Files in the post properties.");
+      writeln("");
+   }
+
+   var productName = getProduct();
+   writeComment("Made in : " + productName);
+   writeComment("G-Code optimized for " + myMachine.getControl() + " controller");
    writeComment(description);
    cpsname = FileSystem.getFilename(getConfigurationPath());
    writeComment("Post-Processor : " + cpsname + " " + obversion);
+   //writeComment("Post processor documentation: " + properties.postProcessorDocs );
    var unitstr = (unit == MM) ? 'mm' : 'inch';
    writeComment("Units = " + unitstr);
+   if (isJet()) {
+      writeComment("Laser UseZ = " + properties.UseZ);
+      writeComment("Laser UsePierce = " + properties.UsePierce);
+   }
 
    writeln("");
    if (hasGlobalParameter("document-path")) {
@@ -336,12 +513,27 @@ function writeHeader(secID) {
    }
    writeln("");
 
-
-   writeComment(numberOfSections + " Operation" + ((numberOfSections == 1) ? "" : "s") + " :");
+   if (properties.generateMultiple && filesToGenerate > 1) {
+      writeComment(numberOfSections + " Operation" + ((numberOfSections == 1) ? "" : "s") + " in " + filesToGenerate + " files.");
+      writeComment("File List:");
+      //writeComment("  " +  FileSystem.getFilename(getOutputPath()));
+      for (var i = 0; i < filesToGenerate; ++i) {
+         filename = makeFileName(i + 1);
+         writeComment("  " + filename);
+      }
+      writeln("");
+      writeComment("This is file: " + sequenceNumber + " of " + filesToGenerate);
+      writeln("");
+      writeComment("This file contains the following operations: ");
+   }
+   else {
+      writeComment(numberOfSections + " Operation" + ((numberOfSections == 1) ? "" : "s") + " :");
+   }
 
    for (var i = secID; i < numberOfSections; ++i) {
       var section = getSection(i);
       var tool = section.getTool();
+      var rpm = section.getMaximumSpindleSpeed();
       isLaser = isPlasma = false;
       switch (tool.type) {
          case TOOL_LASER_CUTTER:
@@ -367,9 +559,18 @@ function writeHeader(secID) {
       if (section.workOffset > 0) {
          writeComment("  Work Coordinate System : G" + (section.workOffset + 53));
       }
-     
-      kMinFeedrate(section, op);
-      
+      if (isLaser || isPlasma)
+         writeComment("  Tool #" + tool.number + ": " + toTitleCase(getToolTypeName(tool.type)) + " Diam = " + xyzFormat.format(tool.jetDiameter) + unitstr);
+      else {
+         writeComment("  Tool #" + tool.number + ": " + toTitleCase(getToolTypeName(tool.type)) + " " + tool.numberOfFlutes + " Flutes, Diam = " + xyzFormat.format(tool.diameter) + unitstr + ", Len = " + tool.fluteLength.toFixed(2) + unitstr);
+         if (properties.routerType != "other") {
+            writeComment("  Spindle : RPM = " + round(rpm, 0) + ", set router dial to " + rpm2dial(rpm, op));
+         }
+         else {
+            writeComment("  Spindle : RPM = " + round(rpm, 0));
+         }
+      }
+      checkMinFeedrate(section, op);
       var machineTimeInSeconds = section.getCycleTime();
       var machineTimeHours = Math.floor(machineTimeInSeconds / 3600);
       machineTimeInSeconds = machineTimeInSeconds % 3600;
@@ -386,11 +587,19 @@ function writeHeader(secID) {
       machineTimeText = machineTimeText + machineTimeSeconds + " sec";
       writeComment(machineTimeText);
 
-     
+      if (properties.generateMultiple && (i + 1 < numberOfSections)) {
+         if (tool.number != getSection(i + 1).getTool().number) {
+            writeln("");
+            writeComment("Remaining operations located in additional files.");
+            break;
+         }
+      }
    }
-   
-   allowHelicalMoves = false; 
-   
+   if (isLaser || isPlasma) {
+      allowHelicalMoves = false; // laser/plasma not doing this, ever
+   }
+   writeln("");
+
    gAbsIncModal.reset();
    gFeedModeModal.reset();
    gPlaneModal.reset();
@@ -403,7 +612,7 @@ function writeHeader(secID) {
          writeBlock(gUnitModal.format(21));
          break;
    }
-
+   //writeComment("Header end");
    writeln("");
    if (debugMode) {
       writeComment("debugMode is true");
@@ -422,11 +631,51 @@ function onOpen() {
 
    // 4.  checking for duplicate tool numbers with the different geometry.
    // check for duplicate tool number
+   for (var i = 0; i < getNumberOfSections(); ++i) {
+      var sectioni = getSection(i);
+      var tooli = sectioni.getTool();
+      if (i < (getNumberOfSections() - 1) && (tooli.number != getSection(i + 1).getTool().number)) {
+         filesToGenerate++;
+      }
+      for (var j = i + 1; j < getNumberOfSections(); ++j) {
+         var sectionj = getSection(j);
+         var toolj = sectionj.getTool();
+         if (tooli.number == toolj.number) {
+            if (xyzFormat.areDifferent(tooli.diameter, toolj.diameter) ||
+               xyzFormat.areDifferent(tooli.cornerRadius, toolj.cornerRadius) ||
+               abcFormat.areDifferent(tooli.taperAngle, toolj.taperAngle) ||
+               (tooli.numberOfFlutes != toolj.numberOfFlutes)) {
+               error(subst(
+                  localize("Using the same tool number for different cutter geometry for operation '%1' and '%2'."),
+                  sectioni.hasParameter("operation-comment") ? sectioni.getParameter("operation-comment") : ("#" + (i + 1)),
+                  sectionj.hasParameter("operation-comment") ? sectionj.getParameter("operation-comment") : ("#" + (j + 1))
+               ));
+               return;
+            }
+         }
+         else {
+            if (properties.generateMultiple == false) {
+               multipleToolError = true;
+            }
+         }
+      }
+   }
+   if (multipleToolError) {
+      alert("Warning", "Multiple tools found.  This post does not support tool changes.  You should repost and select True for Multiple Files in the post properties.");
+   }
+
    numberOfSections = getNumberOfSections();
    writeHeader(0);
    gMotionModal.reset();
 
-   zOutput.format(1);
+   if (properties.plasma_usetouchoff)
+      properties.UseZ = true; // force it on, we need Z motion, always
+
+   if (properties.UseZ)
+      zOutput.format(1);
+   else
+      zOutput.format(0);
+   //writeComment("onOpen end");
 }
 
 function onComment(message) {
@@ -446,6 +695,7 @@ function forceAny() {
 }
 
 function forceAll() {
+   //writeComment("forceAll");
    forceAny();
    sOutput.reset();
    gAbsIncModal.reset();
@@ -457,27 +707,53 @@ function forceAll() {
    mOutput.reset();
 }
 
+// calculate the power setting for the laser
+function calcPower(perc) {
+   var PWMMin = 0;  // make it easy for users to change this
+   var PWMMax = 1000;
+   var v = PWMMin + (PWMMax - PWMMin) * perc / 100.0;
+   return v;
+}
+
 // go to initial position and optionally output the height check code before spindle turns on
 function gotoInitial(checkit) {
    if (debugMode) writeComment("gotoInitial start");
-
    var sectionId = getCurrentSectionId();       // what is the number of this operation (starts from 0)
    var section = getSection(sectionId);         // what is the section-object for this operation
    var maxfeedrate = section.getMaximumFeedrate();
-
    // Rapid move to initial position, first XY, then Z, and do tool height check if needed
    forceAny();
-   var initialPosition = getFramePosition(currentSection.getInitialPosition())
-   f = feedOutput.format(maxfeedrate);
+   var initialPosition = getFramePosition(currentSection.getInitialPosition());
+   if (isLaser || isPlasma) {
+      f = feedOutput.format(maxfeedrate);
+      checkit = false; // never do a tool height check for laser/plasma, even if the user turns it on
+   }
+   else
+      f = "";
    writeBlock(gAbsIncModal.format(90), gMotionModal.format(0), xOutput.format(initialPosition.x), yOutput.format(initialPosition.y), f);
+   if (checkit)
+      if ((isNewfile || isFirstSection()) && properties.checkZ && (properties.checkFeed > 0)) {
+         // do a Peter Stanton style Z seek and stop for a height check
+         z = zOutput.format(clearanceHeight);
+         f = feedOutput.format(toPreciseUnit(properties.checkFeed, MM));
+         writeln("(Tool Height check https://youtu.be/WMsO24IqRKU?t=1059)");
+         writeBlock(gMotionModal.format(1), z, f);
+         writeBlock(mOutput.format(0));
+      }
    if (debugMode) writeComment("gotoInitial end");
 }
 
 // write a G53 Z retract
 function writeZretract() {
    zOutput.reset();
-   writeln("(This relies on homing, see https://openbuilds.com/search/127200199/?q=G53+fusion )");
    writeBlock(gFormat.format(53), gMotionModal.format(0), zOutput.format(toPreciseUnit(properties.machineHomeZ, MM)));  // Retract spindle to Machine Z Home
+   gMotionModal.reset();
+   zOutput.reset();
+}
+
+function writeZEndPos() {
+   zOutput.reset();
+   writeBlock(gFormat.format(53), gMotionModal.format(0), zOutput.format(toPreciseUnit(properties.endPosZ, MM)));  // Retract spindle to Machine Z Home
    gMotionModal.reset();
    zOutput.reset();
 }
@@ -493,21 +769,41 @@ function onSection() {
 
    onRadiusCompensation(); // must check every section
 
-   if (plasma_cutHeight <= 0)
-      error("CUT HEIGHT MUST BE GREATER THAN 0");
-   writeComment("Plasma pierce height " + plasma_pierceHeight);
-   writeComment("Plasma pierce delay " + plasma_pierceDelay);
-   writeComment("Plasma cut height " + plasma_cutHeight);
+   if (isPlasma) {
+      if (plasma_cutHeight <= 0)
+         error("CUT HEIGHT MUST BE GREATER THAN 0");
+      writeComment("Plasma pierce height " + plasma_pierceHeight);
+      writeComment("Plasma pierce delay " + plasma_pierceDelay);
+      writeComment("Plasma cut height " + plasma_cutHeight);
+   }
 
-   // fake the radius else the arcs are too small before being linearized
-   toolRadius = tool.diameter * 4;
-
+   if (isLaser || isPlasma) {
+      // fake the radius else the arcs are too small before being linearized
+      toolRadius = tool.diameter * 4;
+   }
+   else {
+      toolRadius = tool.diameter / 2.0;
+   }
 
    //TODO : plasma check that top height mode is from stock top and the value is positive
    //(onParameter =operation:plasma_cutHeight mode= from stock top)
    //(onParameter =operation:plasma_cutHeight value= 0.8)
 
+   var splitHere = !isFirstSection() && properties.generateMultiple && (tool.number != getPreviousSection().getTool().number);
+
+   if (splitHere) {
+      sequenceNumber++;
+      //var fileIndexFormat = createFormat({width:3, zeropad: true, decimals:0});
+      var path = makeFileName(sequenceNumber);
+      redirectToFile(path);
+      forceAll();
+      writeHeader(getCurrentSectionId());
+      isNewfile = true;  // trigger a spindleondelay
+   }
+
    if (debugMode) writeComment("onSection " + sectionId);
+   writeln(""); // put these here so they go in the new file
+   //writeComment("Section : " + (sectionId + 1) + " haveRapid " + haveRapid);
 
    // Insert a small comment section to identify the related G-Code in a large multi-operations file
    var comment = "Operation " + (sectionId + 1) + " of " + nmbrOfSections;
@@ -515,7 +811,6 @@ function onSection() {
       comment = comment + " : " + getParameter("operation-comment");
    }
    writeComment(comment);
-
    if (debugMode)
       writeComment("retractHeight = " + retractHeight);
    // Write the WCS, ie. G54 or higher.. default to WCS1 / G54 if no or invalid WCS
@@ -524,6 +819,7 @@ function onSection() {
    }
    if ((section.workOffset < 1) || (section.workOffset > 6)) {
       alert("Warning", "Invalid Work Coordinate System. Select WCS 1..6 in SETUP:PostProcess tab. Selecting default WCS1/G54");
+      //section.workOffset = 1;  // If no WCS is set (or out of range), then default to WCS1 / G54 : swarfer: this appears to be readonly
       writeBlock(gWCSOutput.format(54));  // output what we want, G54
       currentworkOffset = 54;
    }
@@ -531,8 +827,139 @@ function onSection() {
       writeBlock(gWCSOutput.format(53 + section.workOffset));  // use the selected WCS
       currentworkOffset = 53 + section.workOffset;
    }
-
    writeBlock(gAbsIncModal.format(90));  // Set to absolute coordinates
+
+   // If the machine has coolant, write M8/M7 or M9 on spindle control line
+   if (properties.hasCoolant) {
+      if (isLaser || isPlasma) {
+         clnt = setCoolant(1) // always turn it on since plasma tool has no coolant option in fusion
+         writeComment('laser coolant ' + clnt)
+      }
+      else
+         clnt = setCoolant(tool.coolant); // use tool setting
+   }
+
+
+   cutmode = -1;
+   //writeComment("isMilling=" + isMilling() + "  isjet=" +isJet() + "  islaser=" + isLaser);
+   switch (tool.type) {
+      case TOOL_WATER_JET:
+         writeComment("Waterjet cutting with GRBL.");
+         power = calcPower(100); // always 100%
+         cutmode = 3;
+         isLaser = false;
+         isPlasma = true;
+         //writeBlock(mOutput.format(cutmode), sOutput.format(power));
+         break;
+      case TOOL_LASER_CUTTER:
+         //writeComment("Laser cutting with GRBL.");
+         isLaser = true;
+         isPlasma = false;
+         var pwas = power;
+         switch (currentSection.jetMode) {
+            case JET_MODE_THROUGH:
+               power = calcPower(properties.PowerThrough);
+               writeComment("LASER THROUGH CUTTING " + properties.PowerThrough + "percent = S" + power);
+               break;
+            case JET_MODE_ETCHING:
+               power = calcPower(properties.PowerEtch);
+               writeComment("LASER ETCH CUTTING " + properties.PowerEtch + "percent = S" + power);
+               break;
+            case JET_MODE_VAPORIZE:
+               power = calcPower(properties.PowerVaporise);
+               writeComment("LASER VAPORIZE CUTTING " + properties.PowerVaporise + "percent = S" + power);
+               break;
+            default:
+               error(localize("Unsupported cutting mode."));
+               return;
+         }
+         // figure cutmode, M3 or M4
+         if ((cuttingMode == 'etch') || (cuttingMode == 'vaporize'))
+            cutmode = 4; // always M4 mode unless cutting
+         else
+            cutmode = 3;
+         if (pwas != power) {
+            sOutput.reset();
+            //if (isFirstSection())
+            if (cutmode == 3)
+               writeBlock(mOutput.format(cutmode), sOutput.format(0), '; flash preventer'); // else you get a flash before the first g0 move
+            else
+               if (cuttingMode != 'cut')
+                  writeBlock(mOutput.format(cutmode), sOutput.format(power), clnt, '; section power');
+         }
+         break;
+      case TOOL_PLASMA_CUTTER:
+         writeComment("Plasma cutting with GRBL.");
+         if (properties.plasma_usetouchoff)
+            writeComment("Using torch height probe and pierce delay.");
+         power = calcPower(100); // always 100%
+         cutmode = 3;
+         isLaser = false;
+         isPlasma = true;
+         //writeBlock(mOutput.format(cutmode), sOutput.format(power));
+         break;
+      default:
+         //writeComment("tool.type = " + tool.type); // all milling tools
+         isPlasma = isLaser = false;
+         break;
+   }
+
+   if (!isLaser && !isPlasma) {
+      // To be safe (after jogging to whatever position), move the spindle up to a safe home position before going to the initial position
+      // At end of a section, spindle is retracted to clearance height, so it is only needed on the first section
+      // it is done with G53 - machine coordinates, so I put it in front of anything else
+      if (isFirstSection()) {
+         writeZretract();
+      }
+      else
+         if (properties.generateMultiple && (tool.number != getPreviousSection().getTool().number))
+            writeZretract();
+
+      gotoInitial(true);
+
+      // folks might want coolant control here
+      // Insert the Spindle start command
+      if (clnt) {
+         // force S and M words if coolant command exists
+         sOutput.reset();
+         mOutput.reset();
+      }
+      if (tool.clockwise) {
+         s = sOutput.format(tool.spindleRPM);
+         var rpmChanged = false;
+         if (s) {
+            rpmChanged = !mFormat.areDifferent(3, mOutput.getCurrent());
+            mOutput.reset();  // always output M3 if speed changes - helps with resume
+         }
+         m = mOutput.format(3);
+         writeBlock(m, s, clnt);
+         if (rpmChanged) // means a speed change, spindle was already on, delay half the time
+            onDwell(properties.spindleOnOffDelay / 2);
+      }
+      else
+         if (properties.spindleTwoDirections) {
+            s = sOutput.format(tool.spindleRPM);
+            m = mOutput.format(4);
+            writeBlock(s, m, clnt);
+         }
+         else {
+            alert("Error", "Counter-clockwise Spindle Operation found, but your spindle does not support this");
+            error("Fatal Error in Operation " + (sectionId + 1) + ": Counter-clockwise Spindle Operation found, but your spindle does not support this");
+            return;
+         }
+      // spindle on delay if needed
+      if (m && (isFirstSection() || isNewfile))
+         onDwell(properties.spindleOnOffDelay);
+
+   }
+   else {
+      if (properties.UseZ)
+         if (isFirstSection() || (properties.generateMultiple && (tool.number != getPreviousSection().getTool().number))) {
+            writeZretract();
+            gotoInitial(false);
+         }
+   }
+
 
    forceXYZ();
 
@@ -545,6 +972,10 @@ function onSection() {
 
    forceAny();
 
+   if (isLaser && properties.UseZ)
+      writeBlock(gMotionModal.format(0), zOutput.format(0));
+   isNewfile = false;
+   //writeComment("onSection end");
 }
 
 function onDwell(seconds) {
@@ -568,31 +999,43 @@ function onRadiusCompensation() {
 }
 
 function onRapid(_x, _y, _z) {
+   haveRapid = true;
    if (debugMode) writeComment("onRapid");
+   if (!isLaser && !isPlasma) {
+      var x = xOutput.format(_x);
+      var y = yOutput.format(_y);
+      var z = zOutput.format(_z);
 
-   if (_z > Zmax) // store max z value for ending
-      Zmax = _z;
-   var x = xOutput.format(_x);
-   var y = yOutput.format(_y);
-   var z = "";
-   // if (isPlasma && properties.UseZ)  // laser does not move Z during cuts
-   // {
-   //    z = zOutput.format(_z);
-   // }
-   if (isPlasma && properties.UseZ) { // && (xyzFormat.format(_z) == xyzFormat.format(plasma_cutHeight))) {
-      if (debugMode) writeComment("onRapid skipping Z motion");
-      if (x || y)
-         writeBlock(gMotionModal.format(0), x, y);
-      zOutput.reset();   // force it on next command
-   }
-   else
-      if (x || y || z)
+      if (x || y || z) {
          writeBlock(gMotionModal.format(0), x, y, z);
-   
+         feedOutput.reset();
+      }
+   }
+   else {
+      if (_z > Zmax) // store max z value for ending
+         Zmax = _z;
+      var x = xOutput.format(_x);
+      var y = yOutput.format(_y);
+      var z = "";
+      // if (isPlasma && properties.UseZ)  // laser does not move Z during cuts
+      // {
+      //    z = zOutput.format(_z);
+      // }
+      if (isPlasma && properties.UseZ) { // && (xyzFormat.format(_z) == xyzFormat.format(plasma_cutHeight))) {
+         if (debugMode) writeComment("onRapid skipping Z motion");
+         if (x || y)
+            writeBlock(gMotionModal.format(0), x, y);
+         zOutput.reset();   // force it on next command
+      }
+      else
+         if (x || y || z)
+            writeBlock(gMotionModal.format(0), x, y, z);
+   }
 }
 
 function onLinear(_x, _y, _z, feed) {
-   if (powerOn)   // do not reset if power is off - for laser G0 moves
+   //if (debugMode) writeComment("onLinear " + haveRapid);
+   if (powerOn || haveRapid)   // do not reset if power is off - for laser G0 moves
    {
       xOutput.reset();
       yOutput.reset(); // always output x and y else arcs go mad
@@ -600,19 +1043,54 @@ function onLinear(_x, _y, _z, feed) {
    var x = xOutput.format(_x);
    var y = yOutput.format(_y);
    var f = feedOutput.format(feed);
+   if (!isLaser && !isPlasma) {
+      var z = zOutput.format(_z);
 
-   if (x || y) {
-      var z = properties.UseZ ? zOutput.format(_z) : "";
-      var s = sOutput.format(power);
-
-      if (powerOn)
-         writeBlock(gMotionModal.format(1), x, y, z, f, s);
+      if (x || y || z) {
+         linmove = 1;          // have to have a default!
+         if (!haveRapid && z)  // if z is changing
+         {
+            if (_z < retractHeight) // compare it to retractHeight, below that is G1, >= is G0
+               linmove = 1;
+            else
+               linmove = 0;
+            if (debugMode && (linmove == 0)) writeComment("NOrapid");
+         }
+         writeBlock(gMotionModal.format(linmove), x, y, z, f);
+      }
       else
-         writeBlock(gMotionModal.format(0), x, y, z, f, s);
-      
+         if (f) {
+            if (getNextRecord().isMotion()) {
+               feedOutput.reset(); // force feed on next line
+            }
+            else {
+               writeBlock(gMotionModal.format(1), f);
+            }
+         }
+   }
+   else {
+      // laser, plasma
+      if (x || y) {
+         var z = ""; //properties.UseZ ? zOutput.format(_z) : "";
+         var s = sOutput.format(power);
+         if (haveRapid) {
+            // this is the old process when we have rapids inserted by onRapid
+            if (!powerOn) // laser/plasma does some odd routing that should be rapid
+               writeBlock(gMotionModal.format(0), x, y, z, f, s);
+            else
+               writeBlock(gMotionModal.format(1), x, y, z, f, s);
+         }
+         else {
+            // this is the new process when we dont have onRapid but GRBL requires G0 moves for noncutting laser moves
+            if (powerOn)
+               writeBlock(gMotionModal.format(1), x, y, z, f, s);
+            else
+               writeBlock(gMotionModal.format(0), x, y, z, f, s);
+         }
+
+      }
    }
 }
-
 
 function onRapid5D(_x, _y, _z, _a, _b, _c) {
    alert("Error", "Tool-Rotation detected - GRBL only supports 3 Axis");
@@ -644,7 +1122,7 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
       return;
    }
    else {
-      if (!powerOn) {
+      if ((isLaser || isPlasma) && !powerOn) {
          if (debugMode) writeComment("arc linearize rapid");
          linearize(tolerance * 4); // this is a rapid move so tolerance can be increased for faster motion and fewer lines of code
          if (debugMode) writeComment("arc linearize rapid done");
@@ -652,14 +1130,24 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
       else
          switch (getCircularPlane()) {
             case PLANE_XY:
-               zo = properties.UseZ ? zOutput.format(z) : "";
-               writeBlock(gPlaneModal.format(17), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zo, iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), feedOutput.format(feed));
+               if (!isLaser && !isPlasma)
+                  writeBlock(gPlaneModal.format(17), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), feedOutput.format(feed));
+               else {
+                  zo = "";//properties.UseZ ? zOutput.format(z) : "";
+                  writeBlock(gPlaneModal.format(17), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zo, iOutput.format(cx - start.x, 0), jOutput.format(cy - start.y, 0), feedOutput.format(feed));
+               }
                break;
             case PLANE_ZX:
-               writeBlock(gPlaneModal.format(18), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), iOutput.format(cx - start.x, 0), kOutput.format(cz - start.z, 0), feedOutput.format(feed));
+               if (!isLaser)
+                  writeBlock(gPlaneModal.format(18), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), iOutput.format(cx - start.x, 0), kOutput.format(cz - start.z, 0), feedOutput.format(feed));
+               else
+                  linearize(tolerance);
                break;
             case PLANE_YZ:
-               writeBlock(gPlaneModal.format(19), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), jOutput.format(cy - start.y, 0), kOutput.format(cz - start.z, 0), feedOutput.format(feed));
+               if (!isLaser)
+                  writeBlock(gPlaneModal.format(19), gMotionModal.format(clockwise ? 2 : 3), xOutput.format(x), yOutput.format(y), zOutput.format(z), jOutput.format(cy - start.y, 0), kOutput.format(cz - start.z, 0), feedOutput.format(feed));
+               else
+                  linearize(tolerance);
                break;
             default:
                linearize(tolerance);
@@ -669,33 +1157,80 @@ function onCircular(clockwise, cx, cy, cz, x, y, z, feed) {
 
 function onSectionEnd() {
    writeln("");
+   // writeBlock(gPlaneModal.format(17));
+   if (isRedirecting()) {
+      if (!isLastSection() && properties.generateMultiple && (tool.number != getNextSection().getTool().number) || (isLastSection() && !isFirstSection())) {
+         writeln("");
+         onClose();
+         closeRedirection();
+      }
+   }
+   //if (properties.hasCoolant)
+   //   setCoolant(0);
    forceAny();
 }
 
 function onClose() {
-
    writeBlock(gAbsIncModal.format(90));   // Set to absolute coordinates for the following moves
-   writeBlock(mFormat.format(5));         // Stop Spindle
-
-   gMotionModal.reset();
-   xOutput.reset();
-   yOutput.reset();
-   if (properties.gotoMCSatend)    // go to MCS home
-   {
-      writeBlock(gAbsIncModal.format(90), gFormat.format(53),
-         gMotionModal.format(0),
-         zOutput.format(toPreciseUnit(properties.machineHomeZ, MM)));
-      writeBlock(gAbsIncModal.format(90), gFormat.format(53),
-         gMotionModal.format(0),
-         xOutput.format(toPreciseUnit(properties.machineHomeX, MM)),
-         yOutput.format(toPreciseUnit(properties.machineHomeY, MM)));
+   if (!isLaser && !isPlasma) {
+      gMotionModal.reset();  // for ease of reading the code always output the G0 words
+      writeZEndPos();
+      //writeBlock(gAbsIncModal.format(90), gFormat.format(53), gMotionModal.format(0), "Z" + xyzFormat.format(toPreciseUnit(properties.machineHomeZ, MM)));  // Retract spindle to Machine Z Home
    }
-   else
-      writeBlock(gMotionModal.format(0), xOutput.format(0), yOutput.format(0));
-
-
-
+   writeBlock(mFormat.format(5));                              // Stop Spindle
+   if (properties.hasCoolant) {
+      writeBlock(setCoolant(0));                           // Stop Coolant
+   }
+   //onDwell(properties.spindleOnOffDelay);                    // Wait for spindle to stop
+   gMotionModal.reset();
+   if (!isLaser && !isPlasma) {
+      if (properties.gotoMCSatend)    // go to MCS home
+      {
+         writeBlock(gAbsIncModal.format(90), gFormat.format(53), gMotionModal.format(0),
+            "X" + xyzFormat.format(toPreciseUnit(properties.machineHomeX, MM)),
+            "Y" + xyzFormat.format(toPreciseUnit(properties.machineHomeY, MM)));
+      }
+      else      // go to WCS home
+      {
+         writeBlock(gAbsIncModal.format(90), gMotionModal.format(0),
+            "X" + xyzFormat.format(toPreciseUnit(properties.machineHomeX, MM)),
+            "Y" + xyzFormat.format(toPreciseUnit(properties.machineHomeY, MM)));
+      }
+   }
+   else     // laser
+   {
+      if (properties.UseZ) {
+         if (isLaser)
+            writeBlock(gAbsIncModal.format(90), gFormat.format(53),
+               gMotionModal.format(0), zOutput.format(toPreciseUnit(properties.machineHomeZ, MM)));
+         if (isPlasma) {
+            writeZEndPos();
+         }
+      }
+   }
    writeBlock(mFormat.format(30));  // Program End
+   //writeln("%");                    // EndOfFile marker
+}
+
+function onTerminate() {
+   // If we are generating multiple files, copy first file to add # of #
+   // Then remove first file and recreate with file list - sharmstr
+   if (filesToGenerate > 1) {
+      var outputPath = getOutputPath();
+      var outputFolder = FileSystem.getFolderPath(getOutputPath());
+      var programFilename = FileSystem.getFilename(outputPath);
+      var newname = makeFileName(1);
+      FileSystem.copyFile(outputPath, newname);
+      FileSystem.remove(outputPath);
+      var file = new TextFile(outputFolder + "\\" + programFilename, true, "ansi");
+      file.writeln("The following gcode files were Created: ");
+      var fname;
+      for (var i = 0; i < filesToGenerate; ++i) {
+         fname = makeFileName(i + 1);
+         file.writeln(fname);
+      }
+      file.close();
+   }
 }
 
 function onCommand(command) {
@@ -715,21 +1250,38 @@ function onCommand(command) {
          break;
       case COMMAND_POWER_OFF:
          if (debugMode) writeComment("power off");
+         if (!haveRapid)
+            writeln("");
          powerOn = false;
-         writeBlock(mFormat.format(5));
+         if (isPlasma || (isLaser && (cuttingMode == 'cut')))
+            writeBlock(mFormat.format(5));
+            writeZretract();
          break;
       case COMMAND_POWER_ON:
          if (debugMode) writeComment("power ON");
+         if (!haveRapid)
+            writeln("");
          powerOn = true;
-         writeBlock("G38.2", zOutput.format(toPreciseUnit(-properties.plasma_probeDistance, MM)), feedOutput.format(toPreciseUnit(properties.plasma_probeRate, MM)));
-         if (debugMode) writeComment("touch offset " + xyzFormat.format(properties.plasma_touchoffOffset));
-         writeBlock(gMotionModal.format(10), "L20", zOutput.format(toPreciseUnit(-properties.plasma_touchoffOffset, MM)));
-         feedOutput.reset();
-         writeBlock(gMotionModal.format(0), zOutput.format(plasma_pierceHeight));
-         writeBlock(mFormat.format(3), sOutput.format(power), clnt);
-         onDwell(plasma_pierceDelay);
-         writeBlock(gMotionModal.format(0), zOutput.format(plasma_cutHeight));
-         probed = true;
+         if (isPlasma || isLaser) {
+            if (properties.UseZ) {
+               if (properties.plasma_usetouchoff && isPlasma) {
+                  writeln("");
+                  writeBlock(gMotionModal.format(10), "L20", zOutput.format(0));
+                  writeBlock("G38.2", zOutput.format(toPreciseUnit(-properties.plasma_probeDistance, MM)), feedOutput.format(toPreciseUnit(properties.plasma_probeRate, MM)));
+                  if (debugMode) writeComment("touch offset " + xyzFormat.format(properties.plasma_touchoffOffset));
+                  gMotionModal.reset();
+                  writeBlock(gMotionModal.format(10), "L20", zOutput.format(toPreciseUnit(-properties.plasma_touchoffOffset, MM)));
+                  feedOutput.reset();
+               }
+               // move to pierce height
+               if (debugMode)
+                  writeBlock(gMotionModal.format(0), zOutput.format(plasma_pierceHeight), " ; pierce height");
+               else
+                  writeBlock(gMotionModal.format(0), zOutput.format(plasma_pierceHeight));
+            }
+            if (isPlasma || (cuttingMode == 'cut') || (clnt))
+               writeBlock(mFormat.format(3), sOutput.format(power), clnt);
+         }
          break;
       default:
          if (debugMode) writeComment("onCommand not handled " + command);
@@ -739,6 +1291,7 @@ function onCommand(command) {
 }
 
 function onParameter(name, value) {
+   //onParameter('operation:keepToolDown', 0)
    if (debugMode) writeComment("onParameter =" + name + "= " + value);   // (onParameter =operation:retractHeight value= :5)
    name = name.replace(" ", "_"); // dratted indexOF cannot have spaces in it!
    if ((name.indexOf("retractHeight_value") >= 0))   // == "operation:retractHeight value")
@@ -755,7 +1308,11 @@ function onParameter(name, value) {
       leadinRate = value;
       if (debugMode && isPlasma) writeComment("leadinRate set " + leadinRate);
    }
-
+   // if (name.indexOf("operation:plasma_cutHeight_value") >= 0)
+   //    {
+   //    plasma_cutHeight = value;
+   //    if (debugMode && isPlasma) writeComment("plasma_cutHeight set " + plasma_cutHeight);
+   //    }
    if (name.indexOf('operation:cuttingMode') >= 0) {
       cuttingMode = value;
       if (debugMode) writeComment("cuttingMode set " + cuttingMode);
@@ -764,6 +1321,7 @@ function onParameter(name, value) {
       if (cuttingMode.indexOf('auto') >= 0)
          cuttingMode = 'cut';
    }
+   // (onParameter =operation:pierceClearance= 1.5)    for plasma
    if (name == 'operation:tool_pierceHeight') {
       if (properties.plasma_pierceHeightoverride)
          plasma_pierceHeight = properties.plasma_pierceHeightValue;
@@ -782,6 +1340,16 @@ function onParameter(name, value) {
       else
          plasma_cutHeight = value;
    }
+   if ((name == 'action') && (value == 'pierce')) {
+      if (debugMode) writeComment('action pierce');
+      onDwell(plasma_pierceDelay);
+      if (properties.UseZ) // done a probe and/or pierce, now lower to cut height
+      {
+         writeBlock(gMotionModal.format(1), zOutput.format(plasma_cutHeight), feedOutput.format(leadinRate));
+         gMotionModal.reset();
+      }
+
+   }
 }
 
 function round(num, digits) {
@@ -792,3 +1360,58 @@ function toFixedNumber(num, digits, base) {
    var pow = Math.pow(base || 10, digits); // cleverness found on web
    return Math.round(num * pow) / pow;
 }
+
+// set the coolant mode from the tool value
+// changed 2023 - returns a string rather than writing the block itself
+function setCoolant(coolval) {
+   var cresult = '';
+
+   if (debugMode) writeComment("setCoolant " + coolval);
+   // 0 if off, 1 is flood, 2 is mist, 7 is both
+   switch (coolval) {
+      case 0:
+         if (coolantIsOn != 0)
+            cresult = mFormat.format(9); // off
+         coolantIsOn = 0;
+         break;
+      case 1:
+         if (coolantIsOn == 2)
+            cresult = mFormat.format(9); // turn mist off
+         cresult = cresult + mFormat.format(8); // flood
+         coolantIsOn = 1;
+         break;
+      case 2:
+         //writeComment("Mist coolant on pin A3. special GRBL compile for this.");
+         if (coolantIsOn == 1)
+            cresult = mFormat.format(9); // turn flood off
+         cresult += ' ' + mFormat.format(7); // mist
+         coolantIsOn = 2;
+         break;
+      case 7:  // flood and mist
+         cresult = mFormat.format(8); // flood
+         cresult += ' ' + mFormat.format(7); // mist
+         coolantIsOn = 7;
+         break;
+      default:
+         writeComment("Coolant option not understood: " + coolval);
+         alert("Warning", "Coolant option not understood: " + coolval);
+         coolantIsOn = 0;
+   }
+   if (debugMode) writeComment("setCoolant end " + cresult);
+   return cresult;
+}
+
+/**
+   make a numbered filename
+   @param index the number of the file, from 1
+*/
+function makeFileName(index) {
+   var fullname = getOutputPath();
+   debug(fullname);
+   fullname = fullname.replace(' ', '_');
+   var filenamePath = FileSystem.replaceExtension(fullname, fileIndexFormat.format(index) + "of" + filesToGenerate + "." + extension);
+   var filename = FileSystem.getFilename(filenamePath);
+   debug(filename);
+   return filenamePath;
+}
+
